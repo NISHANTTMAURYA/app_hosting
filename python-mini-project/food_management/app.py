@@ -1,11 +1,33 @@
 from flask import Flask, render_template, request, redirect, url_for
 import sqlite3
 import os
+import threading
+import time
+import requests
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Keep-alive configuration
+PING_INTERVAL = 840  # 14 minutes (less than Render's 15-minute limit)
+APP_URL = "YOUR_RENDER_URL_HERE"  # You'll add this after deploying
+
+def keep_alive():
+    """Ping the application periodically to prevent it from sleeping"""
+    while True:
+        try:
+            requests.get(APP_URL)
+            print("Keep-alive ping sent")
+        except Exception as e:
+            print(f"Keep-alive ping failed: {e}")
+        time.sleep(PING_INTERVAL)
+
+# Start keep-alive thread
+if os.environ.get('RENDER') == 'true':
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
 
 # Add this dictionary for food images based on location/type
 location_images = {
@@ -91,5 +113,9 @@ def list_expiring_food():
                          food_items=food_items, 
                          location_images=location_images)
 
+@app.route('/health')
+def health_check():
+    return {'status': 'healthy'}, 200
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
